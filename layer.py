@@ -2,8 +2,11 @@ from neuron import Neuron
 import numpy as np
 
 class Layer:
-    def __init__(self, neurons_num, neur_size, lr):
-        self.neurons = [Neuron(neur_size, lr) for _ in range(neurons_num)]
+    def __init__(self, neurons_num, neur_size, lr, neurons=None):
+        if neurons is None:
+            self.neurons = [Neuron(neur_size, lr) for _ in range(neurons_num)]
+        else:
+            self.neurons = neurons
         self.neur_size = neur_size
 
     def get_output(self, input):

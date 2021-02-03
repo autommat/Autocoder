@@ -2,9 +2,11 @@ import numpy as np
 import random
 
 class Neuron:
-    def __init__(self, size, lr):
-        # self.weights = np.array([random.uniform(-0.5,0.5) for _ in range(size)])
-        self.weights = np.ones(size)
+    def __init__(self, size, lr, weights=None):
+        if weights is None:
+            self.weights = np.array([random.uniform(-0.0001,0.0001) for _ in range(size)], dtype=np.longdouble)
+        else:
+            self.weights = weights
         self.lr = lr
 
     def calculate(self, input):
