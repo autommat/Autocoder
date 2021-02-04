@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 from network import Network
 
-CR=6
+CR=32
 EPOCHS = 5_000
 FRAG_SIZE = 8
 LEARNING_RATE = 5*10**-7
