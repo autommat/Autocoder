@@ -1,111 +1,103 @@
 import math
 import random
-import statistics
-
 import numpy as np
 import cv2
-from layer import Layer
-from neuron import Neuron
-import numpy as np
+from network import Network
 
-CR=2
+CR=6
 EPOCHS = 5_000
-FRAG_SIZE = 4
+FRAG_SIZE = 8
 LEARNING_RATE = 5*10**-7
 NUM_PATTERNS = 50
 
-def PSNR(original, reproduced):
+def calculate_PSNR(original, reproduced):
     sum_of_squared_diffs = 0
     for x in range(original.shape[0]):
         for y in range(original.shape[1]):
-            sum_of_squared_diffs += int((original[x,y]-reproduced[x,y])**2)
-        print(sum_of_squared_diffs)
+            sum_of_squared_diffs += (int(original[x,y,0])-int(reproduced[x,y,0]))**2
     value = 255**2 * 512**2 / sum_of_squared_diffs
     return 10*math.log10(value)
 
-def test_network():
-    pass
-
-if __name__ == '__main__':
-    in_image_rgb = cv2.imread('img/01.bmp')
-    rgb_shape = in_image_rgb.shape
-    in_image = in_image_rgb[:, :, 0]#.flatten()
-    # print("test PSNR:", PSNR(in_image,in_image))
-    shape = in_image.shape
-    print(shape)
-
-    fragments = []
+def opencv_image_to_net_input(image):
+    image = image[:,:,0]
+    shape = image.shape
+    fragments=[]
     for x in range(0, shape[0], FRAG_SIZE):
         for y in range(0, shape[1], FRAG_SIZE):
-            fragments.append(in_image[x:x + FRAG_SIZE, y:y + FRAG_SIZE])
+            flat = image[x:x + FRAG_SIZE, y:y + FRAG_SIZE].flatten()
+            fragments.append(flat)
+            # print(flat)
+    return fragments
 
-    print(len(fragments))
-    chosen_fragments = random.sample(fragments, NUM_PATTERNS)
-    flat_chosen_fragments = [chosen_fragment.flatten() for chosen_fragment in chosen_fragments]
+def net_output_to_opencv_image(net_out):
+    size = FRAG_SIZE * int((len(net_out)) ** 0.5)
+    out_img = np.empty((size,size), dtype=np.uint8)
+    # out_img = np.empty_like(in_image_rgb[:,:,0])
+    i = 0
+    for x in range(0, size, FRAG_SIZE):
+        for y in range(0, size, FRAG_SIZE):
+            out_img[x:x + FRAG_SIZE, y:y + FRAG_SIZE] = net_out[i].reshape((FRAG_SIZE, FRAG_SIZE))
+            i += 1
+    # out_img = normalize_image(out_img)
+    return cv2.merge([out_img] * 3)
 
-    # v for test images, do testowania sieci, a nie do treningu
-    fragment_shape = fragments[0].shape
-    flat_fragments = [fragment.flatten() for fragment in fragments]
-    # ^ for test images
+def normalize_val(val):
+    if val>255:
+        return 255
+    elif val<0:
+        return 0
+    else:
+        return int(val)
 
-    N = len(flat_fragments[0])
-    M = int(N/CR)
-    hidden_layer = Layer(M,N,LEARNING_RATE)
-    final_layer = Layer(N,M,LEARNING_RATE)
-    # hid_neurs = [Neuron(4,0.01,np.array([0.1,-0.2,0.3,-0.4])), Neuron(4,0.01,np.array([0.5,-0.6,0.7,-0.8]))]
-    # fin_neurs = [Neuron(2,0.01,np.array([0.8,-0.7])), Neuron(2,0.01,np.array([0.6,-0.5])), Neuron(2,0.01,np.array([0.4,-0.3])), Neuron(2,0.01,np.array([0.2,-0.1]))]
-    # hidden_layer=Layer(2,4,0.01, neurons=hid_neurs)
-    # final_layer = Layer(4, 2, 0.01, neurons=fin_neurs)
+def normalize_np_array(array):
+    for i in range(len(array)):
+        array[i] = normalize_val(array[i])
+    return array
 
+def calculate_compr_degree(size, num_hid_neu, num_fin_neu):
+    nom = size*size * 8
+    denom = num_fin_neu * num_hid_neu * 8 + num_hid_neu * 12 * (size/FRAG_SIZE)**2
+    return nom/denom
+
+if __name__ == '__main__':
+    train_filenames = ['img/01.bmp', "img/05.bmp"]
+    train_patterns = []
+    size = None
+    for filename in train_filenames:
+        in_image_rgb = cv2.imread(filename)
+        if size is None:
+            size = in_image_rgb.shape[0]
+        fragments = opencv_image_to_net_input(in_image_rgb)
+        train_patterns += random.sample(fragments, NUM_PATTERNS)
+
+    in_out_neurs_number = len(train_patterns[0])
+    hid_neurs_number = int(in_out_neurs_number/CR)
+    net = Network(in_out_neurs_number, hid_neurs_number, LEARNING_RATE)
+
+    psnr_file = open(f"out/psnr_CR{CR}_{EPOCHS}ep.txt", 'w')
+    comp_deg = calculate_compr_degree(size,hid_neurs_number,in_out_neurs_number)
+    psnr_file.write(f"cr: {CR} hid neurs: {hid_neurs_number}\n")
+    psnr_file.write(f"compression degree: {comp_deg}\n")
 
     for epoch in range(EPOCHS):
         if epoch % 10 == 0:
             print(f"====EPOCH {epoch}====")
-        for pattern in flat_chosen_fragments:
-            # pattern=np.array([1,2,3,4])
-            hid_out = hidden_layer.get_output(pattern)
-            # print(hid_out[0])
-            fin_out = final_layer.get_output(hid_out)
-            fin_err = pattern-fin_out
-            hid_err = final_layer.get_error_hidden_layer(fin_err)
-            # print(hid_err)
-            if(epoch%10==0):
-                # print(statistics.mean(abs(fin_err))) # relevant
-                pass
-            final_layer.adjust_weights(fin_err,hid_out)
-            hidden_layer.adjust_weights(hid_err,pattern)
-            pass
+        for pattern in train_patterns:
+            net.train(pattern)
 
-    for i, flat_fragment in enumerate(flat_fragments):
-        network_output = final_layer.get_output(hidden_layer.get_output(flat_fragment))
-        # network_output = flat_fragment
-        for j, pix in enumerate(network_output):
-            if pix > 255:
-                network_output[j] = 255
-            elif pix < 0:
-                network_output[j] = 0
-            else:
-                network_output[j]=int(pix)
-        flat_fragments[i] = network_output
 
-    reshaped_fragments = [flat_f.reshape(fragment_shape) for flat_f in flat_fragments]
+    for x in range(1,9):
+        img_in = cv2.imread(f"img/0{x}.bmp")
+        fragments = opencv_image_to_net_input(img_in)
+        output = [normalize_np_array(net.test(x)) for x in fragments]
+        out_image= net_output_to_opencv_image(output)
+        cv2.imwrite(f"out/img{x}_CR{CR}_{EPOCHS}ep.bmp", out_image)
+        psnr = calculate_PSNR(img_in, out_image)
+        print(psnr)
+        psnr_file.write(f"{x} psnr {psnr}\n")
+        with open(f"out/img{x}.csv", "a") as ratio:
+            ratio.write(f"{comp_deg}, {psnr}\n")
+    psnr_file.close()
+    # cv2.imshow("function", out_image)
+    # cv2.waitKey(0)
 
-    i=0
-    out_image=np.empty_like(in_image)
-    for x in range(0, shape[0], FRAG_SIZE):
-        for y in range(0, shape[1], FRAG_SIZE):
-            out_image[x:x + FRAG_SIZE, y:y + FRAG_SIZE] = reshaped_fragments[i]
-            i+=1
-    print(out_image.shape)
-    # frag = img1[:32,:32]
-    # frag = frag *2
-    # img1[:32,:32] = frag
-
-    print("PSNR value:", PSNR(in_image,out_image))
-    # print(len(img1))+
-
-    out_image_rgb = cv2.merge([out_image]*3)
-    print(out_image_rgb.shape)
-    # reshaped = out_image.reshape(rgb_shape)
-    cv2.imshow("test", out_image_rgb)
-    cv2.waitKey(0)

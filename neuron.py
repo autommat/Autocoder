@@ -1,10 +1,13 @@
 import numpy as np
 import random
 
+FROM = -0.01
+TO = 0.01
+
 class Neuron:
     def __init__(self, size, lr, weights=None):
         if weights is None:
-            self.weights = np.array([random.uniform(-0.0001,0.0001) for _ in range(size)], dtype=np.longdouble)
+            self.weights = np.array([random.uniform(FROM, TO) for _ in range(size)], dtype=np.longdouble)
         else:
             self.weights = weights
         self.lr = lr
